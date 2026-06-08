@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CosmoAI Hub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f0f14; color: #e2e2e2; height: 100vh; display: flex; flex-direction: column; }
+
+    header { padding: 16px 24px; background: #16161e; border-bottom: 1px solid #2a2a3a; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: #a78bfa; }
+    header span { font-size: 0.8rem; color: #6b7280; }
+
+    .controls { display: flex; gap: 10px; padding: 12px 24px; background: #13131a; border-bottom: 1px solid #2a2a3a; flex-wrap: wrap; }
+    select { background: #1e1e2e; border: 1px solid #3a3a4a; color: #e2e2e2; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+    select:focus { outline: none; border-color: #a78bfa; }
+
+    .badge { padding: 4px 10px; border-radius: 99px; font-size: 0.7rem; font-weight: 600; border: 1px solid; }
+    .badge.claude  { color: #f59e0b; border-color: #f59e0b33; background: #f59e0b11; }
+    .badge.openai  { color: #10b981; border-color: #10b98133; background: #10b98111; }
+    .badge.gemini  { color: #3b82f6; border-color: #3b82f633; background: #3b82f611; }
+    .badge.groq    { color: #ec4899; border-color: #ec489933; background: #ec489911; }
+
+    #chat { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+    .msg { max-width: 75%; padding: 12px 16px; border-radius: 12px; font-size: 0.92rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .msg.user { align-self: flex-end; background: #4f46e5; color: #fff; border-bottom-right-radius: 2px; }
+    .msg.ai   { align-self: flex-start; background: #1e1e2e; border: 1px solid #2a2a3a; border-bottom-left-radius: 2px; }
+    .msg .who { font-size: 0.72rem; color: #9ca3af; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .msg.error { background: #3b0a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    .msg.typing { color: #6b7280; font-style: italic; }
+
+    .input-row { display: flex; gap: 10px; padding: 16px 24px; background: #13131a; border-top: 1px solid #2a2a3a; }
+    #msgInput { flex: 1; background: #1e1e2e; border: 1px solid #3a3a4a; color: #e2e2e2; padding: 10px 14px; border-radius: 8px; font-size: 0.92rem; resize: none; max-height: 120px; line-height: 1.5; }
+    #msgInput:focus { outline: none; border-color: #a78bfa; }
+    #sendBtn { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 0.92rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    #sendBtn:hover { background: #4338ca; }
+    #sendBtn:disabled { background: #374151; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🌌 CosmoAI Hub</h1>
+  <span>Switch between any AI — one interface</span>
+</header>
+
+<div class="controls">
+  <select id="providerSelect"></select>
+  <select id="modelSelect"></select>
+  <span id="providerBadge" class="badge"></span>
+</div>
+
+<div id="chat"></div>
+
+<div class="input-row">
+  <textarea id="msgInput" rows="1" placeholder="Type a message…"></textarea>
+  <button id="sendBtn">Send</button>
+</div>
+
+<script>
+  let providers = [];
+
+  async function loadProviders() {
+    providers = await fetch('/api/providers').then(r => r.json());
+    const sel = document.getElementById('providerSelect');
+    providers.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.name;
+      sel.appendChild(o);
+    });
+    updateModels();
+    sel.addEventListener('change', updateModels);
+  }
+
+  function updateModels() {
+    const pid = document.getElementById('providerSelect').value;
+    const p = providers.find(x => x.id === pid);
+    const msel = document.getElementById('modelSelect');
+    msel.innerHTML = '';
+    p.models.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      msel.appendChild(o);
+    });
+    const badge = document.getElementById('providerBadge');
+    badge.textContent = p.name; badge.className = `badge ${pid}`;
+  }
+
+  function addMsg(role, text, providerLabel) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = `msg ${role === 'user' ? 'user' : role === 'error' ? 'error' : 'ai'}`;
+    if (providerLabel) {
+      const who = document.createElement('div');
+      who.className = 'who'; who.textContent = providerLabel;
+      div.appendChild(who);
+    }
+    const body = document.createElement('div');
+    body.textContent = text;
+    div.appendChild(body);
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+
+  async function send() {
+    const input = document.getElementById('msgInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    const provider = document.getElementById('providerSelect').value;
+    const model = document.getElementById('modelSelect').value;
+    const pName = providers.find(p => p.id === provider)?.name;
+
+    input.value = ''; input.style.height = 'auto';
+    document.getElementById('sendBtn').disabled = true;
+
+    addMsg('user', message);
+    const typing = addMsg('ai', 'Thinking…', pName);
+    typing.classList.add('typing');
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, model, message }),
+      });
+      const data = await res.json();
+      typing.classList.remove('typing');
+      typing.querySelector('div:last-child').textContent = data.error ? `Error: ${data.error}` : data.reply;
+      if (data.error) typing.classList.add('error');
+    } catch (e) {
+      typing.classList.remove('typing');
+      typing.classList.add('error');
+      typing.querySelector('div:last-child').textContent = `Network error: ${e.message}`;
+    }
+
+    document.getElementById('sendBtn').disabled = false;
+    input.focus();
+  }
+
+  document.getElementById('sendBtn').addEventListener('click', send);
+  document.getElementById('msgInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  document.getElementById('msgInput').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  loadProviders();
+</script>
+</body>
+</html>
