@@ -1,0 +1,17 @@
+{
+  "name": "cosmo-ai-hub",
+  "version": "1.0.0",
+  "description": "Multi-AI chat app — Claude, GPT, Gemini, Groq in one place",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "express": "^4.19.0",
+    "dotenv": "^16.4.0",
+    "openai": "^4.52.0",
+    "node-fetch": "^3.3.2"
+  }
+}
